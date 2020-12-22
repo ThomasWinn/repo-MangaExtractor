@@ -1,20 +1,119 @@
 # pip install requests
 # pip install html5lib
 # pip install bs4
-# pip install manganelo
-# pip install fpdf
 
 import requests
-from bs4 import BeautifulSoup
 import urllib.parse 
-# from manganelo import SearchManga
-# from manganelo import MangaInfo
-from PyPDF2 import PdfFileReader
 import os
-from PIL import Image
 import glob
-import json
 import re
+import shutil
+import stat
+
+from PIL import Image
+from bs4 import BeautifulSoup
+
+def search_manga(title):
+
+    base_url = 'https://mangafast.net/?s='
+
+    title = title.replace(' ', '+')
+
+    search_url = base_url + title
+
+    r = requests.get(search_url)
+
+    soup = BeautifulSoup(r.content, 'html5lib')
+
+    table = soup.find('div', attrs={'class':'p mrg'})
+
+
+    title_array = [] 
+
+    '''
+    [{title : bloody monday, link : https://...com}]
+    '''
+
+    # See if the search yielded any results
+    try:
+        table.findAll('div', attrs={'class':'ls5'})
+    except:
+        print('---------------------------------------------------')
+        print("There were no search results found. Check the spelling and/or use the japanese equivalent name.")
+        main()
+
+    for div in table.findAll('div', attrs={'class':'ls5'}):
+        title_info = {}
+        
+        # Because title has many \t \n char 
+        title = div.a.h3.text
+        title = title.strip('\n')
+        title = title.strip('\t')
+        title_info['title'] = title
+        title_info['link'] = div.a['href']
+        
+        title_array.append(title_info)
+
+    for i in range(len(title_array)):
+        print('[{}]  {}'.format(i, title_array[i]['title']))
+
+    print()
+
+    # TODO : USER INPUT
+    print('---------------------------------------------------')
+    print('Choose manga chapters to download separated by commas i.e. 1,10,20')
+    print('Choose manga chapters by range? Use dash i.e. 1-14 ... WILL NOT DOWNLOAD HALF CHAPTERS')
+    print('Type ALL to download all chapters')
+    print()
+    user_input = input('What chapters should I download for you? : ')
+
+    # returns whole array containing all chapters
+    if (user_input.upper() == 'ALL'):
+        return title_array
+    
+    # returns array with range of chapter numbers in an array
+    elif ('-' in user_input):
+
+        user_input = user_input.replace(' ', '')
+        chapter_array = []
+        
+        parse_user_input = user_input.split('-') # [1,14]
+
+        for i in range(int(parse_user_input[0]), int(parse_user_input[1]), 1): # 1  -  14
+
+            # get index in title_array at the index where chapter = what in for loop
+            num_index = next((index for (index, d) in enumerate(title_array) if d["chapter"] == i), None) # O(1)
+
+            chapter_array.append(title_array[num_index])
+
+        return chapter_array
+    
+    # return array with specific chapters downloaded
+    elif (',' in user_input):
+
+        user_input = user_input.replace(' ', '')
+        chapter_array = []
+
+        parse_user_input = user_input.split(',')
+
+        for i in range(len(parse_user_input)):
+            num_index = next((index for (index, d) in enumerate(title_array) if d["chapter"] == int(parse_user_input[i])), None) # O(1)
+
+            chapter_array.append(title_array[num_index])
+
+        return chapter_array
+
+    # # Shouldn't need to have to check for something that isn't a number.... 
+    # if (user_input.isnumeric() and int(user_input) % 1 == 0 and int(user_input) >= 0 and int(user_input) <= len(title_array) - 1):
+    #     return title_array[int(user_input)]
+    else:
+        print("Incorrect Input. Back to the start")
+        main()
+        
+
+def remove_readonly(func, path, _):
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
 
 def get_manga_panels(url):
     # get manga panels
@@ -39,83 +138,6 @@ def extract_manga_chapter_url(url, chapter):
     manga_url_chapter = urllib.parse.urlunparse(url_part)
 
     return manga_url_chapter
-
-def search_manga(title):
-
-    base_url = 'https://mangafast.net/?s='
-
-    title = title.replace(' ', '+')
-
-    search_url = base_url + title
-
-    r = requests.get(search_url)
-
-    soup = BeautifulSoup(r.content, 'html5lib')
-
-    table = soup.find('div', attrs={'class':'p mrg'})
-
-
-    title_array = [] 
-
-    '''
-    [{title : bloody monday, link : https://...com}]
-    '''
-
-    for div in table.findAll('div', attrs={'class':'ls5'}):
-        title_info = {}
-        
-        # Because title has many \t \n char 
-        title = div.a.h3.text
-        title = title.strip('\n')
-        title = title.strip('\t')
-        title_info['title'] = title
-        title_info['link'] = div.a['href']
-        
-        title_array.append(title_info)
-
-    for i in range(len(title_array)):
-        print('[{}]  {}'.format(i, title_array[i]['title']))
-
-    print()
-
-    # TODO : USER INPUT
-    # user_input = input('Choose the manga to download from PICK 1: ')
-    user_input = '0' # CHANGE THIS IN THE END
-
-    if (user_input.isnumeric() and int(user_input) % 1 == 0 and int(user_input) >= 0 and int(user_input) <= len(title_array) - 1):
-        return title_array[int(user_input)]
-    else:
-        print("Incorrect Input. Quitting Session. Rerun Program.")
-        quit(1)
-        return 
-
-
- # # EXPORT TO CSV
-    # URL = "http://www.values.com/inspirational-quotes"
-    # r = requests.get(URL) 
-    
-    # soup = BeautifulSoup(r.content, 'html5lib') 
-
-    # quotes=[]  # a list to store quotes 
-    
-    # table = soup.find('div', attrs = {'id':'all_quotes'})  
-    
-    # for row in table.findAll('div', 
-    #                         attrs = {'class':'col-6 col-lg-3 text-center margin-30px-bottom sm-margin-30px-top'}): 
-    #     quote = {} 
-    #     quote['theme'] = row.h5.text 
-    #     quote['url'] = row.a['href'] 
-    #     quote['img'] = row.img['src'] 
-    #     quote['lines'] = row.img['alt'].split(" #")[0] 
-    #     quote['author'] = row.img['alt'].split(" #")[1] 
-    #     quotes.append(quote) 
-    
-    # filename = 'inspirational_quotes.csv'
-    # with open(filename, 'w', newline='') as f: 
-    #     w = csv.DictWriter(f,['theme','url','img','lines','author']) 
-    #     w.writeheader() 
-    #     for quote in quotes: 
-    #         w.writerow(quote)
 
 def find_chapters(url):
     
@@ -144,7 +166,7 @@ def find_chapters(url):
 
     return chapter_to_download
 
-def download_chapters(chapters):
+def download_chapters(chapters, dir, title):
 
     for i in range(len(chapters)):
         
@@ -159,103 +181,69 @@ def download_chapters(chapters):
         for img in table.findAll('img', attrs={'class':'lazy'}):
 
             images.append(img['data-src'])
+        
+        # C:\Users\tpngu\OneDrive\Desktop\CSCI\repo-MangaExtractor\Bloody Monday\Chapter_1
+        image_folder_path = os.path.join(dir, 'Chapter_' + str(chapters[i]['chapter'])) # create folder for images
+        os.mkdir(image_folder_path)
 
-        # DOWNLOAD ALL FILES TO DIRECTORY
+        for img_link in images:
+            
+            # get string between this for page number
+            start = img_link.find('page-') + len('page-') # page-
+            end = img_link.find('.jpg') # .jpg
+            pg_num = img_link[start:end]
 
-        # TRANSFER TO PDF USING PIL
+            res = requests.get(img_link)
+            
 
+            f_name = os.path.join(image_folder_path, pg_num + '.jpg')
+            file = open(f_name, 'wb')
+            file.write(res.content)
+            file.close()
+        
+        im_paths = []
+        print("Finished Downloading all Images of chapter {}".format(chapters[i]['chapter']))
+        for file in sorted(glob.glob(image_folder_path + '/*.jpg'), key=os.path.getmtime):
+            im = Image.open(file)
+            im.convert('RGB')
+            im_paths.append(im)
 
+        im1 = im_paths[0]
+        im_paths.pop(0)
 
+        chapter_num = chapters[i]['chapter']
+        pdf = os.path.join(dir, 'Chapter_{}.pdf'.format(chapter_num))
+        im1.save(pdf, save_all=True, append_images=im_paths)
 
-
+        shutil.rmtree(image_folder_path, onerror=remove_readonly)
 
 
 def main():
-    # ADD USER INPUT
-    # title = input("Manga to Download: ")
-    # download_all = input("Download all Chapters? YES OR NO: ")
-    # chapter = input("Chapter to Download: ")
 
-    # search = SearchManga(title, threaded=True)
+    print('---------------------------------------------------')
+    title = input("Manga to Download: ")
 
+    title_info = search_manga(title) # return {'title' : title, 'link' : https...}
 
-    title_info = search_manga("bloody Monday") # return {'title' : title, 'link' : https...}
+    if (' ' in title_info['title']):
+        underscore_title = title_info['title'].replace(' ', '_')
+    else:
+        underscore_title = title_info['title']
 
-    chapter = find_chapters(title_info['link'])
+    cwd = os.getcwd()
+    title_dir = os.path.join(cwd, underscore_title) # C:\Users\tpngu\OneDrive\Desktop\CSCI\repo-MangaExtractor\Bloody_Monday
+    # print(title_dir)
 
-    download_chapters(chapter)
+    # os.mkdir(title_dir)   # TRY CATCH CAN"T MAKE FILE IF EXISTS
 
-    # panel_list = get_manga_panels(manga_url_chapter) # get all images url from chapter
+    chapter = find_chapters(title_info['link']) # return {'chapter': int, 'link' : string}
 
-    # download_pdf(panel_list)
+    download_chapters(chapter, title_dir, underscore_title)
 
-    # Download Manga images to pdf
-
-
-    '''
-    Check cwd for 'Manga' folder -> if none, make one else do nothing
-
-    Make folder for title of manga to download -> if none, make one else do nothing
-
-    def download
-        create folder chapter_NUM
-        open pdf
-        add jpg images on to it
-        center preferred
-    '''
-
-# https://github.com/nixonjoshua98/manganelo/blob/master/manganelo/api/downloadchapter.py
 if __name__ == '__main__':
-    # https://mangafast.net/bloody-monday-chapter-97/
+    # https://mangafast.net/
+
     main()
-
-    # im_list = []
-
-    # im = 'https://cdn.statically.io/img/img.y7349.top/img/c/bloody-monday/chapter-97/bloody-monday-chapter-97-page-1.jpg?q=70'
-    # im2 = 'https://cdn.statically.io/img/img.y7349.top/img/c/bloody-monday/chapter-97/bloody-monday-chapter-97-page-2.jpg?q=70'
-    # im3 = 'https://cdn.statically.io/img/img.y7349.top/img/c/bloody-monday/chapter-97/bloody-monday-chapter-97-page-3.jpg?q=70'
-
-    # im_list.append(im)
-    # im_list.append(im2)
-    # im_list.append(im3)
-
-    # for i in im_list:
-    #     parsed_url = i.split('-')
-    #     num = parsed_url[7]
-    #     parsed_num = num.split('.')
-    #     pg_num = parsed_num[0]
-    #     res = requests.get(i)
-    #     f_name = pg_num + ".jpg"
-
-    #     file = open(f_name, "wb")
-    #     file.write(res.content)
-    #     file.close()
-
-    # im_paths = []
-
-    # for file in glob.glob('./*.jpg'):
-    #     im = Image.open(file)
-    #     im.convert('RGB')
-    #     im_paths.append(im)
-    
-    # im1 = im_paths[0]
-    # im_paths.pop(0)
-
-    # im1.save(r'lol.pdf', save_all=True, append_images=im_paths)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
