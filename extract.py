@@ -9,6 +9,7 @@ import glob
 import re
 import shutil
 import stat
+import errno
 
 from PIL import Image
 from bs4 import BeautifulSoup
@@ -33,16 +34,23 @@ def search_manga(title):
     '''
     [{title : bloody monday, link : https://...com}]
     '''
+    # TODO: CHANGE TRY ACCEPT TO A IF BLOCK AND SEE WHAT FINDALL RETURNS TTO WHICH IT DOENS"T RETURN ANY RESULTS
+    # See if the search yielded any results probably none... TRY EXCEPT WON"T WORK
+    # try:
+    #     table.findAll('div', attrs={'class':'ls5'})
+    # except:
+    #     print('---------------------------------------------------')
+    #     print("There were no search results found. Check the spelling and/or use the japanese equivalent name.")
+    #     main()
 
-    # See if the search yielded any results
-    try:
-        table.findAll('div', attrs={'class':'ls5'})
-    except:
-        print('---------------------------------------------------')
-        print("There were no search results found. Check the spelling and/or use the japanese equivalent name.")
-        main()
+    list_of_div = table.findAll('div', attrs={'class':'ls5'})
+    
+    if (len(list_of_div) == 0):
+            print('---------------------------------------------------')
+            print("There were no search results found. Check the spelling and/or use the japanese equivalent name.")
+            main()
 
-    for div in table.findAll('div', attrs={'class':'ls5'}):
+    for div in list_of_div:
         title_info = {}
         
         # Because title has many \t \n char 
@@ -57,87 +65,18 @@ def search_manga(title):
     for i in range(len(title_array)):
         print('[{}]  {}'.format(i, title_array[i]['title']))
 
-    print()
-
-    # TODO : USER INPUT
     print('---------------------------------------------------')
-    print('Choose manga chapters to download separated by commas i.e. 1,10,20')
-    print('Choose manga chapters by range? Use dash i.e. 1-14 ... WILL NOT DOWNLOAD HALF CHAPTERS')
-    print('Type ALL to download all chapters')
+    print('Input only one number')
     print()
-    user_input = input('What chapters should I download for you? : ')
+    user_input = input('What title should I download for you? : ')
 
-    # returns whole array containing all chapters
-    if (user_input.upper() == 'ALL'):
-        return title_array
-    
-    # returns array with range of chapter numbers in an array
-    elif ('-' in user_input):
-
-        user_input = user_input.replace(' ', '')
-        chapter_array = []
-        
-        parse_user_input = user_input.split('-') # [1,14]
-
-        for i in range(int(parse_user_input[0]), int(parse_user_input[1]), 1): # 1  -  14
-
-            # get index in title_array at the index where chapter = what in for loop
-            num_index = next((index for (index, d) in enumerate(title_array) if d["chapter"] == i), None) # O(1)
-
-            chapter_array.append(title_array[num_index])
-
-        return chapter_array
-    
-    # return array with specific chapters downloaded
-    elif (',' in user_input):
-
-        user_input = user_input.replace(' ', '')
-        chapter_array = []
-
-        parse_user_input = user_input.split(',')
-
-        for i in range(len(parse_user_input)):
-            num_index = next((index for (index, d) in enumerate(title_array) if d["chapter"] == int(parse_user_input[i])), None) # O(1)
-
-            chapter_array.append(title_array[num_index])
-
-        return chapter_array
-
-    # # Shouldn't need to have to check for something that isn't a number.... 
-    # if (user_input.isnumeric() and int(user_input) % 1 == 0 and int(user_input) >= 0 and int(user_input) <= len(title_array) - 1):
-    #     return title_array[int(user_input)]
+    if (user_input.isnumeric() and int(user_input) % 1 == 0 and int(user_input) >= 0 and int(user_input) <= len(title_array) - 1):
+        return title_array[int(user_input)]
     else:
+        print('---------------------------------------------------')
         print("Incorrect Input. Back to the start")
         main()
-        
-
-def remove_readonly(func, path, _):
-    os.chmod(path, stat.S_IWRITE)
-    func(path)
-
-def get_manga_panels(url):
-    # get manga panels
-    panels = []
-
-    r = requests.get(url)
-    soup = BeautifulSoup(r.content, 'html5lib')
-
-    div_imgs = soup.find('div', attrs={'class':'container-chapter-reader'})
-
-    for i in div_imgs.findAll('img'):
-        panels.append(i['src'])
-
-    return panels
-
-def extract_manga_chapter_url(url, chapter):
-    parsed_url = url.split('/')
-
-    # get chapter url
-    url_part = list(urllib.parse.urlparse(url))
-    url_part[2] = '/chapter/{}/chapter_{}'.format(parsed_url[4], chapter)
-    manga_url_chapter = urllib.parse.urlunparse(url_part)
-
-    return manga_url_chapter
+        return
 
 def find_chapters(url):
     
@@ -149,10 +88,11 @@ def find_chapters(url):
     
     chapter_list = []
 
+    # TODO : support chap number plus additional characters i.e. 82 v2
     for tr in table.tbody.findAll('tr', attrs={'itemprop':'hasPart'}):
         chapter_info = {}
 
-        chapter_info['chapter'] = int(tr.td.a.span.text)
+        chapter_info['chapter'] = float(tr.td.a.span.text)
         chapter_info['link'] = tr.td.a['href']
 
         chapter_list.append(chapter_info)
@@ -160,12 +100,74 @@ def find_chapters(url):
     
     chapter_list = sorted(chapter_list, key=lambda i: i['chapter'])
 
-    # TODO : USER INPUT FROM SORTED LIST... ASK FOR RANGE OR comma delimeter, or ASK TO DOWNLOAD ALL
+    for i in range(len(chapter_list)):
+        print('[{}] chapter {}'.format(chapter_list[i]['chapter'], chapter_list[i]['chapter']))
+
+    print('---------------------------------------------------')
+
     chapter_to_download = []
-    chapter_to_download.append(chapter_list[0])
+
+    print('---------------------------------------------------')
+    print('Choose manga chapters to download separated by commas i.e. 1,10,20')
+    print('Choose manga chapters by range? Use dash i.e. 1-14 ... WILL NOT DOWNLOAD HALF CHAPTERS')
+    print('Type \'ALL\' to download all chapters')
+    print()
+    user_input = input('What chapters should I download for you? : ')
+
+    # returns whole array containing all chapters
+    if (user_input.upper() == 'ALL'):
+        return chapter_list
+    
+    # TODO: when i do 0 - 1, only downloads 0 not 1
+    # returns array with range of chapter numbers in an array
+    elif ('-' in user_input):
+
+        user_input = user_input.replace(' ', '')
+        
+        parse_user_input = user_input.split('-') # [1,14]
+
+        for i in range(int(parse_user_input[0]), int(parse_user_input[1]), 1): # 1  -  14
+
+            # get index in title_array at the index where chapter = what in for loop
+            num_index = next((index for (index, d) in enumerate(chapter_list) if d["chapter"] == i), None) # O(1)
+
+            chapter_to_download.append(chapter_list[num_index])
+
+        return chapter_to_download
+    
+    # return array with specific chapters downloaded
+    elif (',' in user_input):
+
+        user_input = user_input.replace(' ', '')
+
+        parse_user_input = user_input.split(',')
+
+        for i in range(len(parse_user_input)):
+            num_index = next((index for (index, d) in enumerate(chapter_list) if d["chapter"] == int(parse_user_input[i])), None) # O(1)
+
+            chapter_to_download.append(chapter_list[num_index])
+
+        return chapter_to_download
+
+    # # Shouldn't need to have to check for something that isn't a number.... 
+    # if (user_input.isnumeric() and int(user_input) % 1 == 0 and int(user_input) >= 0 and int(user_input) <= len(title_array) - 1):
+    #     return title_array[int(user_input)]
+    else:
+        print('---------------------------------------------------')
+        print("Incorrect Input. Back to the start")
+        main()
+        return
 
     return chapter_to_download
 
+def remove_readonly(func, path, _):
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+# TODO: DO A TERMINAL PERCENTAGE COUNT THING
+'''
+Image file extensions supported [.jpg, .png]
+'''
 def download_chapters(chapters, dir, title):
 
     for i in range(len(chapters)):
@@ -190,20 +192,31 @@ def download_chapters(chapters, dir, title):
             
             # get string between this for page number
             start = img_link.find('page-') + len('page-') # page-
-            end = img_link.find('.jpg') # .jpg
+
+            if (img_link.find('.jpg') != -1):
+                end = img_link.find('.jpg') # .jpg
+                f_ext = '.jpg'
+            elif (img_link.find('png') != -1):
+                end = img_link.find('.png') # .png
+                f_ext = '.png'
+            else:
+                print('---------------------------------------------------')
+                print('Image file extension not supported as of now. IMPLEMENT NOW.')
+
             pg_num = img_link[start:end]
 
             res = requests.get(img_link)
             
 
-            f_name = os.path.join(image_folder_path, pg_num + '.jpg')
+            f_name = os.path.join(image_folder_path, pg_num + f_ext)
             file = open(f_name, 'wb')
             file.write(res.content)
             file.close()
         
         im_paths = []
+        print('---------------------------------------------------')
         print("Finished Downloading all Images of chapter {}".format(chapters[i]['chapter']))
-        for file in sorted(glob.glob(image_folder_path + '/*.jpg'), key=os.path.getmtime):
+        for file in sorted(glob.glob(image_folder_path + '/*' + f_ext), key=os.path.getmtime):
             im = Image.open(file)
             im.convert('RGB')
             im_paths.append(im)
@@ -234,7 +247,13 @@ def main():
     title_dir = os.path.join(cwd, underscore_title) # C:\Users\tpngu\OneDrive\Desktop\CSCI\repo-MangaExtractor\Bloody_Monday
     # print(title_dir)
 
-    # os.mkdir(title_dir)   # TRY CATCH CAN"T MAKE FILE IF EXISTS
+    try:
+        os.mkdir(title_dir)
+    except OSError as exc:
+        if exc.errno != errno.EEXIST:
+            raise
+        pass
+
 
     chapter = find_chapters(title_info['link']) # return {'chapter': int, 'link' : string}
 
@@ -242,7 +261,6 @@ def main():
 
 if __name__ == '__main__':
     # https://mangafast.net/
-
     main()
 
 
