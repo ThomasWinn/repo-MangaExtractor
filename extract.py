@@ -10,6 +10,8 @@ import re
 import shutil
 import stat
 import errno
+import numpy as np
+import time
 
 from PIL import Image
 from bs4 import BeautifulSoup
@@ -34,14 +36,6 @@ def search_manga(title):
     '''
     [{title : bloody monday, link : https://...com}]
     '''
-    # TODO: CHANGE TRY ACCEPT TO A IF BLOCK AND SEE WHAT FINDALL RETURNS TTO WHICH IT DOENS"T RETURN ANY RESULTS
-    # See if the search yielded any results probably none... TRY EXCEPT WON"T WORK
-    # try:
-    #     table.findAll('div', attrs={'class':'ls5'})
-    # except:
-    #     print('---------------------------------------------------')
-    #     print("There were no search results found. Check the spelling and/or use the japanese equivalent name.")
-    #     main()
 
     list_of_div = table.findAll('div', attrs={'class':'ls5'})
     
@@ -88,28 +82,34 @@ def find_chapters(url):
     
     chapter_list = []
 
-    # TODO : support chap number plus additional characters i.e. 82 v2
+    # IF IT SEES ADDITIONAL CHAR INFRONT OF THE CHAPTER NAME, IGNORE LATER VERSIONS AND ONLY ADD BASE VERSION TO CHAPTER LIST
+    # WILL NOT SUPPORT CHAPTERS i.e. '82 V2' WILL ONLY USE 82
     for tr in table.tbody.findAll('tr', attrs={'itemprop':'hasPart'}):
         chapter_info = {}
 
-        chapter_info['chapter'] = float(tr.td.a.span.text)
-        chapter_info['link'] = tr.td.a['href']
+        try:
+            chapter_number = float(tr.td.a.span.text)
+            chapter_info['chapter'] = chapter_number
+            chapter_info['link'] = tr.td.a['href']
 
-        chapter_list.append(chapter_info)
-    
-    
+            chapter_list.append(chapter_info)
+        except ValueError:
+            continue
+
+        
     chapter_list = sorted(chapter_list, key=lambda i: i['chapter'])
 
     for i in range(len(chapter_list)):
-        print('[{}] chapter {}'.format(chapter_list[i]['chapter'], chapter_list[i]['chapter']))
+        # print('[{}] chapter {}'.format(chapter_list[i]['chapter'], chapter_list[i]['chapter']))
+        print('Chapter {}'.format(chapter_list[i]['chapter']))
 
     print('---------------------------------------------------')
 
     chapter_to_download = []
 
-    print('---------------------------------------------------')
-    print('Choose manga chapters to download separated by commas i.e. 1,10,20')
-    print('Choose manga chapters by range? Use dash i.e. 1-14 ... WILL NOT DOWNLOAD HALF CHAPTERS')
+    print('Please use decimals as there are half chapters as well!')
+    print('Choose manga chapters to download separated by commas i.e. 1.0,10.0,20.0')
+    print('Choose manga chapters by range? Use dash i.e. 1.0-14.0 ... WILL NOT DOWNLOAD HALF CHAPTERS')
     print('Type \'ALL\' to download all chapters')
     print()
     user_input = input('What chapters should I download for you? : ')
@@ -118,18 +118,26 @@ def find_chapters(url):
     if (user_input.upper() == 'ALL'):
         return chapter_list
     
-    # TODO: when i do 0 - 1, only downloads 0 not 1
-    # returns array with range of chapter numbers in an array
+    # TODO: when I DO 2-3, it only populates 2... not 2 and 3
+    # I believe you should only look at first decimal instead of whole float. Truncating must be done. 2.3000000000000003 output sample...
+
+    # returns array with range of chapter numbers in an array 
+    # returns all half chapters in that range as well
     elif ('-' in user_input):
 
         user_input = user_input.replace(' ', '')
         
         parse_user_input = user_input.split('-') # [1,14]
-
-        for i in range(int(parse_user_input[0]), int(parse_user_input[1]), 1): # 1  -  14
+        print(parse_user_input)
+        
+        for i in np.arange(float(parse_user_input[0]), float(parse_user_input[1]) + 0.1, 0.1): # 1.0  -  14.0
 
             # get index in title_array at the index where chapter = what in for loop
             num_index = next((index for (index, d) in enumerate(chapter_list) if d["chapter"] == i), None) # O(1)
+
+            if (num_index == None):
+                print(i)
+                continue
 
             chapter_to_download.append(chapter_list[num_index])
 
@@ -143,7 +151,7 @@ def find_chapters(url):
         parse_user_input = user_input.split(',')
 
         for i in range(len(parse_user_input)):
-            num_index = next((index for (index, d) in enumerate(chapter_list) if d["chapter"] == int(parse_user_input[i])), None) # O(1)
+            num_index = next((index for (index, d) in enumerate(chapter_list) if d["chapter"] == float(parse_user_input[i])), None) # O(1)
 
             chapter_to_download.append(chapter_list[num_index])
 
@@ -164,7 +172,28 @@ def remove_readonly(func, path, _):
     os.chmod(path, stat.S_IWRITE)
     func(path)
 
-# TODO: DO A TERMINAL PERCENTAGE COUNT THING
+# Print iterations progress
+def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    # Print New Line on Complete
+    if iteration == total: 
+        print()
+
 '''
 Image file extensions supported [.jpg, .png]
 '''
@@ -172,6 +201,8 @@ def download_chapters(chapters, dir, title):
 
     for i in range(len(chapters)):
         
+        print('Beginning to download chapter {}'.format(chapters[i]['chapter']))
+
         r = requests.get(chapters[i]['link'])
 
         soup = BeautifulSoup(r.content, 'html5lib')
@@ -184,38 +215,42 @@ def download_chapters(chapters, dir, title):
 
             images.append(img['data-src'])
         
-        # C:\Users\tpngu\OneDrive\Desktop\CSCI\repo-MangaExtractor\Bloody Monday\Chapter_1
         image_folder_path = os.path.join(dir, 'Chapter_' + str(chapters[i]['chapter'])) # create folder for images
         os.mkdir(image_folder_path)
 
-        for img_link in images:
+        printProgressBar(0, len(images), prefix='Progress:', suffix= 'Complete')
+
+        for j in range(len(images)):
             
             # get string between this for page number
-            start = img_link.find('page-') + len('page-') # page-
+            start = images[j].find('page-') + len('page-') # page-
 
-            if (img_link.find('.jpg') != -1):
-                end = img_link.find('.jpg') # .jpg
+            if (images[j].find('.jpg') != -1):
+                end = images[j].find('.jpg') # .jpg
                 f_ext = '.jpg'
-            elif (img_link.find('png') != -1):
-                end = img_link.find('.png') # .png
+            elif (images[j].find('png') != -1):
+                end = images[j].find('.png') # .png
                 f_ext = '.png'
             else:
                 print('---------------------------------------------------')
                 print('Image file extension not supported as of now. IMPLEMENT NOW.')
 
-            pg_num = img_link[start:end]
+            pg_num = images[j][start:end]
 
-            res = requests.get(img_link)
+            res = requests.get(images[j])
             
 
             f_name = os.path.join(image_folder_path, pg_num + f_ext)
             file = open(f_name, 'wb')
             file.write(res.content)
             file.close()
+
+            time.sleep(0.1)
+
+            printProgressBar(j+1, len(images), prefix='Progress:', suffix= 'Complete')
         
         im_paths = []
-        print('---------------------------------------------------')
-        print("Finished Downloading all Images of chapter {}".format(chapters[i]['chapter']))
+        
         for file in sorted(glob.glob(image_folder_path + '/*' + f_ext), key=os.path.getmtime):
             im = Image.open(file)
             im.convert('RGB')
@@ -229,7 +264,7 @@ def download_chapters(chapters, dir, title):
         im1.save(pdf, save_all=True, append_images=im_paths)
 
         shutil.rmtree(image_folder_path, onerror=remove_readonly)
-
+        print('---------------------------------------------------')
 
 def main():
 
@@ -255,9 +290,26 @@ def main():
         pass
 
 
-    chapter = find_chapters(title_info['link']) # return {'chapter': int, 'link' : string}
+    chapter = find_chapters(title_info['link']) # return {'chapter': float, 'link' : string}
 
-    download_chapters(chapter, title_dir, underscore_title)
+    print(chapter)
+    print(len(chapter))
+
+    # Check file for each pdf name of each, if found, skip that chapter to donwload by taking out of chapter list.
+    for i in chapter:
+        num = str(i['chapter'])
+        if (os.path.exists(os.path.join(title_dir, 'Chapter_' + num + '.pdf'))):
+            num_index = next((index for (index, d) in enumerate(chapter) if d["chapter"] == float(num)), None) # O(1)
+            chapter.pop(num_index)
+        else:
+            continue
+
+    if (len(chapter) == 0):
+        print('There are no additional files to be downloaded')
+    elif (len(chapter) > 0):
+        download_chapters(chapter, title_dir, underscore_title)
+    else:
+        print('ERROR OCCURED')
 
 if __name__ == '__main__':
     # https://mangafast.net/
