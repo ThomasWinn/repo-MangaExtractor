@@ -12,9 +12,12 @@ import stat
 import errno
 import numpy as np
 import time
+import ezgmail
 
 from PIL import Image
 from bs4 import BeautifulSoup
+
+RECIPIENT_ADDRESS = 'xxx'
 
 def search_manga(title):
 
@@ -128,15 +131,15 @@ def find_chapters(url):
         user_input = user_input.replace(' ', '')
         
         parse_user_input = user_input.split('-') # [1,14]
-        print(parse_user_input)
+        # print(parse_user_input)
         
         for i in np.arange(float(parse_user_input[0]), float(parse_user_input[1]) + 0.1, 0.1): # 1.0  -  14.0
 
             # get index in title_array at the index where chapter = what in for loop
-            num_index = next((index for (index, d) in enumerate(chapter_list) if d["chapter"] == i), None) # O(1)
+            num_index = next((index for (index, d) in enumerate(chapter_list) if d["chapter"] == round(i,1)), None) # O(1)
 
             if (num_index == None):
-                print(i)
+                # print(i)
                 continue
 
             chapter_to_download.append(chapter_list[num_index])
@@ -279,8 +282,7 @@ def main():
         underscore_title = title_info['title']
 
     cwd = os.getcwd()
-    title_dir = os.path.join(cwd, underscore_title) # C:\Users\tpngu\OneDrive\Desktop\CSCI\repo-MangaExtractor\Bloody_Monday
-    # print(title_dir)
+    title_dir = os.path.join(cwd, underscore_title)
 
     try:
         os.mkdir(title_dir)
@@ -289,20 +291,16 @@ def main():
             raise
         pass
 
-
     chapter = find_chapters(title_info['link']) # return {'chapter': float, 'link' : string}
 
-    print(chapter)
-    print(len(chapter))
-
     # Check file for each pdf name of each, if found, skip that chapter to donwload by taking out of chapter list.
-    for i in chapter:
-        num = str(i['chapter'])
-        if (os.path.exists(os.path.join(title_dir, 'Chapter_' + num + '.pdf'))):
-            num_index = next((index for (index, d) in enumerate(chapter) if d["chapter"] == float(num)), None) # O(1)
-            chapter.pop(num_index)
-        else:
-            continue
+    pdf_array = os.listdir(title_dir)
+
+    for i in pdf_array:
+        for j in chapter:
+            if (i.find(str(j['chapter'])) != -1):
+                chapter.remove(j)
+                break
 
     if (len(chapter) == 0):
         print('There are no additional files to be downloaded')
@@ -310,6 +308,16 @@ def main():
         download_chapters(chapter, title_dir, underscore_title)
     else:
         print('ERROR OCCURED')
+
+    # PDF SUCK
+    # pdf = []
+
+    # for i in chapter:
+    #     pdf.append(os.path.join(title_dir, 'Chapter_' + str(i['chapter']) + '.pdf'))
+
+    # ezgmail.init()
+
+    # ezgmail.send(RECIPIENT_ADDRESS, title_info['title'] + ' Scans', 'Enjoy', pdf)
 
 if __name__ == '__main__':
     # https://mangafast.net/
