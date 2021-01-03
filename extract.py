@@ -1,6 +1,7 @@
 # pip install requests
 # pip install html5lib
 # pip install bs4
+from __future__ import print_function
 
 import requests
 import urllib.parse 
@@ -12,12 +13,20 @@ import stat
 import errno
 import numpy as np
 import time
-import ezgmail
 
 from PIL import Image
 from bs4 import BeautifulSoup
 
-RECIPIENT_ADDRESS = 'xxx'
+import pickle
+import os.path
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+
+from apiclient.http import MediaFileUpload
+
+# If modifying these scopes, delete the file token.pickle.
+SCOPES = ['https://www.googleapis.com/auth/drive']
 
 def search_manga(title):
 
@@ -221,6 +230,12 @@ def download_chapters(chapters, dir, title):
         image_folder_path = os.path.join(dir, 'Chapter_' + str(chapters[i]['chapter'])) # create folder for images
         os.mkdir(image_folder_path)
 
+        # NEED TO CHECK IF CHAPTER IS EMPTY
+        if (len(images) == 0):
+            print('Chapter {} is empty'.format(str(chapters[i]['chapter'])))
+            print('---------------------------------------------------')
+            continue
+
         printProgressBar(0, len(images), prefix='Progress:', suffix= 'Complete')
 
         for j in range(len(images)):
@@ -255,20 +270,90 @@ def download_chapters(chapters, dir, title):
         im_paths = []
         
         for file in sorted(glob.glob(image_folder_path + '/*' + f_ext), key=os.path.getmtime):
-            im = Image.open(file)
-            im.convert('RGB')
-            im_paths.append(im)
+            try:
+                im = Image.open(file)
+                im.convert('RGB')
+                im_paths.append(im)
+            except:
+                print('Image did not load on site properly. Website fault.')
+                continue
+        
+        # Checks to see if there are no elements in list to make pdf out of
+        try:
+            im1 = im_paths[0]
+            im_paths.pop(0)
 
-        im1 = im_paths[0]
-        im_paths.pop(0)
+            chapter_num = chapters[i]['chapter']
+            pdf = os.path.join(dir, 'Chapter_{}.pdf'.format(chapter_num))
+            im1.save(pdf, save_all=True, append_images=im_paths)
 
-        chapter_num = chapters[i]['chapter']
-        pdf = os.path.join(dir, 'Chapter_{}.pdf'.format(chapter_num))
-        im1.save(pdf, save_all=True, append_images=im_paths)
+            shutil.rmtree(image_folder_path, onerror=remove_readonly)
+            print('---------------------------------------------------')
+        except:
+            continue
 
-        shutil.rmtree(image_folder_path, onerror=remove_readonly)
-        print('---------------------------------------------------')
+def gd_init():
+    """Shows basic usage of the Drive v3 API.
+    Prints the names and ids of the first 10 files the user has access to.
+    """
+    creds = None
+    # The file token.pickle stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
 
+    service = build('drive', 'v3', credentials=creds)
+
+    return service
+
+def gd_create_folder(service, manga_name):
+    file_metadata = {
+        'name': manga_name,
+        'mimeType': 'application/vnd.google-apps.folder'
+    }
+
+    file = service.files().create(body=file_metadata, fields='id').execute()
+    print('---------------------------------------------------')
+    print('Finished Creating Folders Now Uploading')
+    return file.get('id')
+
+def gd_upload_chapter(service, id, dir):
+    pdf_location = glob.glob(os.path.join(dir, "*.{}".format('pdf')))
+
+    os.chdir(dir)
+    pdf_list = glob.glob('*.pdf')
+
+    for i in range(len(pdf_list)):
+        file_metadata = {
+            'name': pdf_list[i],
+            'parents': [id]
+        }
+        media = MediaFileUpload(pdf_location[i],
+                                mimetype='application/pdf',
+                                resumable=True)
+        file = service.files().create(body=file_metadata,
+                                            media_body=media,
+                                            fields='id').execute()
+
+    print('---------------------------------------------------')
+    print('Finished Uploading')
+
+
+# TODO: if there is only one search result, choose it automatically else display results for user.
+# TODO: allow single chapter upload
 def main():
 
     print('---------------------------------------------------')
@@ -276,13 +361,16 @@ def main():
 
     title_info = search_manga(title) # return {'title' : title, 'link' : https...}
 
-    if (' ' in title_info['title']):
-        underscore_title = title_info['title'].replace(' ', '_')
+    if (' ' in title_info['title'] or '\\' in title_info['title'] or '/' in title_info['title'] or ':' in title_info['title'] 
+    or '*' in title_info['title'] or '?' in title_info['title'] or '"' in title_info['title'] or '<' in title_info['title']
+    or '>' in title_info['title'] or '|' in title_info['title']):
+        edited_title = title_info['title'].replace(' ', '_').replace('\\', '_').replace('/', '_').replace(':', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_')
+
     else:
-        underscore_title = title_info['title']
+        edited_title = title_info['title']
 
     cwd = os.getcwd()
-    title_dir = os.path.join(cwd, underscore_title)
+    title_dir = os.path.join(cwd, edited_title)
 
     try:
         os.mkdir(title_dir)
@@ -305,19 +393,20 @@ def main():
     if (len(chapter) == 0):
         print('There are no additional files to be downloaded')
     elif (len(chapter) > 0):
-        download_chapters(chapter, title_dir, underscore_title)
+        download_chapters(chapter, title_dir, edited_title)
     else:
         print('ERROR OCCURED')
 
-    # PDF SUCK
-    # pdf = []
+    # Upload to google drive
 
-    # for i in chapter:
-    #     pdf.append(os.path.join(title_dir, 'Chapter_' + str(i['chapter']) + '.pdf'))
+    print('---------------------------------------------------')
+    print('Uploading to google drive')
 
-    # ezgmail.init()
+    service = gd_init()
 
-    # ezgmail.send(RECIPIENT_ADDRESS, title_info['title'] + ' Scans', 'Enjoy', pdf)
+    f_id = gd_create_folder(service, title_info['title'])
+
+    gd_upload_chapter(service, f_id, title_dir)
 
 if __name__ == '__main__':
     # https://mangafast.net/
