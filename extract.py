@@ -63,26 +63,33 @@ def search_manga(title):
         title = div.a.h3.text
         title = title.strip('\n')
         title = title.strip('\t')
+        title = title.replace('\t', '')
+        title = title.strip()
         title_info['title'] = title
         title_info['link'] = div.a['href']
         
         title_array.append(title_info)
 
-    for i in range(len(title_array)):
-        print('[{}]  {}'.format(i, title_array[i]['title']))
-
-    print('---------------------------------------------------')
-    print('Input only one number')
-    print()
-    user_input = input('What title should I download for you? : ')
-
-    if (user_input.isnumeric() and int(user_input) % 1 == 0 and int(user_input) >= 0 and int(user_input) <= len(title_array) - 1):
-        return title_array[int(user_input)]
-    else:
+    if (len(title_array) == 1):
         print('---------------------------------------------------')
-        print("Incorrect Input. Back to the start")
-        main()
-        return
+        print('Found {}'.format(title_array[0]['title']))
+        return title_array[0]
+    else:
+        for i in range(len(title_array)):
+            print('[{}]  {}'.format(i, title_array[i]['title']))
+
+        print('---------------------------------------------------')
+        print('Input only one number')
+        print()
+        user_input = input('What title should I download for you? : ')
+
+        if (user_input.isnumeric() and int(user_input) % 1 == 0 and int(user_input) >= 0 and int(user_input) <= len(title_array) - 1):
+            return title_array[int(user_input)]
+        else:
+            print('---------------------------------------------------')
+            print("Incorrect Input. Back to the start")
+            main()
+            return
 
 def find_chapters(url):
     
@@ -129,9 +136,6 @@ def find_chapters(url):
     # returns whole array containing all chapters
     if (user_input.upper() == 'ALL'):
         return chapter_list
-    
-    # TODO: when I DO 2-3, it only populates 2... not 2 and 3
-    # I believe you should only look at first decimal instead of whole float. Truncating must be done. 2.3000000000000003 output sample...
 
     # returns array with range of chapter numbers in an array 
     # returns all half chapters in that range as well
@@ -169,14 +173,16 @@ def find_chapters(url):
 
         return chapter_to_download
 
-    # # Shouldn't need to have to check for something that isn't a number.... 
-    # if (user_input.isnumeric() and int(user_input) % 1 == 0 and int(user_input) >= 0 and int(user_input) <= len(title_array) - 1):
-    #     return title_array[int(user_input)]
+    # todo: single chapter download
     else:
-        print('---------------------------------------------------')
-        print("Incorrect Input. Back to the start")
-        main()
-        return
+        if (user_input.isnumeric() and int(user_input) % 1 == 0 and int(user_input) >= int(chapter_list[0]['chapter']) and int(user_input) <= len(chapter_list) - 1):
+            num_index = next((index for (index, d) in enumerate(chapter_list) if d["chapter"] == round(i,1)), None)
+            return chapter_to_download.append(chapter_list[num_index])
+        else:
+            print('---------------------------------------------------')
+            print("Incorrect Input. Back to the start")
+            main()
+            return
 
     return chapter_to_download
 
@@ -223,9 +229,9 @@ def download_chapters(chapters, dir, title):
 
         images = [] # list of image links WORKLS
 
-        for img in table.findAll('img', attrs={'class':'lazy'}):
+        for img in table.findAll('img'):
 
-            images.append(img['data-src'])
+            images.append(img['src'])
         
         image_folder_path = os.path.join(dir, 'Chapter_' + str(chapters[i]['chapter'])) # create folder for images
         os.mkdir(image_folder_path)
@@ -337,6 +343,7 @@ def gd_upload_chapter(service, id, dir):
     pdf_list = glob.glob('*.pdf')
 
     for i in range(len(pdf_list)):
+        
         file_metadata = {
             'name': pdf_list[i],
             'parents': [id]
@@ -347,13 +354,13 @@ def gd_upload_chapter(service, id, dir):
         file = service.files().create(body=file_metadata,
                                             media_body=media,
                                             fields='id').execute()
+        print('Uploaded {} / {} to GDrive'.format(i+1, len(pdf_list)))
 
     print('---------------------------------------------------')
     print('Finished Uploading')
 
 
 # TODO: if there is only one search result, choose it automatically else display results for user.
-# TODO: allow single chapter upload
 def main():
 
     print('---------------------------------------------------')
@@ -379,7 +386,7 @@ def main():
             raise
         pass
 
-    chapter = find_chapters(title_info['link']) # return {'chapter': float, 'link' : string}
+    chapter = find_chapters(title_info['link']) # return {'chapter': float, 'link' : string}, ...
 
     # Check file for each pdf name of each, if found, skip that chapter to donwload by taking out of chapter list.
     pdf_array = os.listdir(title_dir)
