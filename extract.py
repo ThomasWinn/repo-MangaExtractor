@@ -175,9 +175,10 @@ def find_chapters(url):
 
     # todo: single chapter download
     else:
-        if (user_input.isnumeric() and int(user_input) % 1 == 0 and int(user_input) >= int(chapter_list[0]['chapter']) and int(user_input) <= len(chapter_list) - 1):
-            num_index = next((index for (index, d) in enumerate(chapter_list) if d["chapter"] == round(i,1)), None)
-            return chapter_to_download.append(chapter_list[num_index])
+        if (int(float(user_input)) % 1 == 0 and int(float(user_input)) >= int(chapter_list[0]['chapter']) and int(float(user_input)) <= len(chapter_list) - 1):
+            num_index = next((index for (index, d) in enumerate(chapter_list) if d["chapter"] == round(float(user_input),1)), None)
+            chapter_to_download.append(chapter_list[num_index])
+            return chapter_to_download
         else:
             print('---------------------------------------------------')
             print("Incorrect Input. Back to the start")
@@ -336,6 +337,7 @@ def gd_create_folder(service, manga_name):
     print('Finished Creating Folders Now Uploading')
     return file.get('id')
 
+# upload all pdf's in specified folder.... even the ones you've already uploaded to Gdrive
 def gd_upload_chapter(service, id, dir):
     pdf_location = glob.glob(os.path.join(dir, "*.{}".format('pdf')))
 
@@ -359,8 +361,6 @@ def gd_upload_chapter(service, id, dir):
     print('---------------------------------------------------')
     print('Finished Uploading')
 
-
-# TODO: if there is only one search result, choose it automatically else display results for user.
 def main():
 
     print('---------------------------------------------------')
@@ -389,8 +389,12 @@ def main():
     chapter = find_chapters(title_info['link']) # return {'chapter': float, 'link' : string}, ...
 
     # Check file for each pdf name of each, if found, skip that chapter to donwload by taking out of chapter list.
-    pdf_array = os.listdir(title_dir)
-
+    pdf_array = os.listdir(title_dir) # Lists all pdf in the searched title's folder
+    
+    # search through all pdf in the title's folder
+    # if the chapters attempting to download is existent in the folder already, remove it from the list to download
+    
+    # FOr example, chapter 2 in title's folder. If the user wants to downlaod a range from chapter 2 - 8, it will remove 2 from the 'to download' list and download only 3-8
     for i in pdf_array:
         for j in chapter:
             if (i.find(str(j['chapter'])) != -1):
